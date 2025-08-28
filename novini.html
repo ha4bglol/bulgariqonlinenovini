@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="bg">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+  <title>News Freedom</title>
+  <meta name="description" content="News Freedom – най-актуалните новини от България, директно от Google News RSS." />
+  <link rel="icon" type="image/png" href="icon.png" />
+  <style>
+    :root {
+      /* Apple-inspired Light Mode Palette */
+      --bg: #f9f9fb;
+      --fg: #1d1d1f;
+      --muted: #6e6e73;
+      --accent: #007aff;
+      --card-bg: #ffffff;
+      --header-bg: rgba(249, 249, 251, 0.85);
+      --border-color: rgba(0, 0, 0, 0.1);
+      --card-hover-bg: #f5f5f7;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      /* Apple-inspired Dark Mode Palette */
+      :root {
+        --bg: #000000;
+        --fg: #f5f5f7;
+        --muted: #8e8e93;
+        --accent: #0a84ff;
+        --card-bg: #1c1c1e;
+        --header-bg: rgba(28, 28, 30, 0.85);
+        --border-color: rgba(255, 255, 255, 0.15);
+        --card-hover-bg: #2c2c2e;
+      }
+    }
+
+    * {
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", "Arial", sans-serif;
+      background: var(--bg);
+      color: var(--fg);
+      line-height: 1.45;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+
+    header {
+      position: sticky;
+      top: 0;
+      background: var(--header-bg);
+      -webkit-backdrop-filter: blur(20px);
+      backdrop-filter: blur(20px);
+      padding: 12px 16px;
+      text-align: center;
+      z-index: 10;
+      border-bottom: 0.5px solid var(--border-color);
+    }
+
+    header h1 {
+      margin: 0;
+      font-size: 17px;
+      font-weight: 600;
+      letter-spacing: -0.2px;
+      color: var(--fg);
+    }
+
+    main {
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      max-width: 700px; /* Center content on larger screens */
+      margin: 0 auto;
+    }
+
+    article.card {
+      background: var(--card-bg);
+      border-radius: 16px;
+      padding: 16px;
+      border: 0.5px solid var(--border-color);
+      transition: background-color 0.2s ease-in-out;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    article.card:hover {
+      background: var(--card-hover-bg);
+    }
+
+    .content h2 {
+      margin: 0;
+      font-size: 17px;
+      font-weight: 600; /* Bolder title for emphasis */
+      letter-spacing: -0.3px;
+      color: var(--fg);
+      line-height: 1.4;
+    }
+
+    .meta {
+      font-size: 13px;
+      color: var(--muted);
+      display: flex;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 8px;
+    }
+
+    /* === ПРОМЕНЕНИ СТИЛОВЕ ЗА БУТОНА === */
+    .footer a {
+      display: inline-block;
+      text-align: center;
+      padding: 8px 16px;
+      border-radius: 999px; /* Pill-shaped button */
+      background: transparent; /* Прозрачен фон */
+      color: var(--accent); /* Син текст */
+      border: 1.5px solid var(--accent); /* Синя рамка */
+      text-decoration: none;
+      font-size: 15px;
+      font-weight: 600;
+      transition: all 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+      -webkit-transform: translateZ(0);
+    }
+
+    .footer a:hover {
+        transform: scale(1.03);
+        background: var(--accent); /* Запълва със синьо при hover */
+        color: #fff; /* Текстът става бял при hover */
+    }
+    
+    .footer a:active {
+        transform: scale(0.98); /* Press-down effect */
+    }
+    /* === КРАЙ НА ПРОМЕНИТЕ === */
+
+    footer {
+      text-align: center;
+      font-size: 12px;
+      color: var(--muted);
+      padding: 20px;
+      margin-top: 30px;
+    }
+
+    .status {
+      text-align: center;
+      font-size: 12px;
+      color: var(--muted);
+      margin-top: 4px;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>News Freedom</h1>
+    <div class="status" id="status">Зареждане…</div>
+  </header>
+
+  <main id="grid"></main>
+
+  <footer>
+    News Freedom показва автоматично новини чрез Google News RSS.<br>
+    Всички права принадлежат на съответните източници.
+  </footer>
+
+  <script>
+    const BASE_BG_RSS = 'https://news.google.com/rss?hl=bg&gl=BG&ceid=BG:bg';
+    const CORS_PROXY = (url) => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
+    const LIMIT = 20;
+    const REFRESH_MS = 30 * 60 * 1000;
+
+    const $ = (sel, root=document) => root.querySelector(sel);
+    const $$ = (sel, root=document) => [...root.querySelectorAll(sel)];
+
+    function fmtTime(dateStr) {
+      try {
+        const d = new Date(dateStr);
+        return d.toLocaleString('bg-BG', {hour12:false});
+      } catch(e) { return dateStr; }
+    }
+
+    function timeAgo(dateStr) {
+      const d = new Date(dateStr).getTime();
+      const diff = Math.max(0, Date.now() - d);
+      const mins = Math.floor(diff/60000);
+      if(mins < 60) return `${mins} мин.`;
+      const hrs = Math.floor(mins/60);
+      if(hrs < 24) return `${hrs} ч.`;
+      const days = Math.floor(hrs/24);
+      return `${days} д.`;
+    }
+
+    function sourceFromItem(item){
+      const src = item.querySelector('source');
+      return src ? src.textContent.trim() : '';
+    }
+
+    function normalizeArticles(items){
+      const seen = new Set();
+      const out = [];
+      for(const it of items){
+        const title = it.querySelector('title')?.textContent?.trim() || 'Без заглавие';
+        const link = it.querySelector('link')?.textContent?.trim() || '#';
+        if(seen.has(title) || seen.has(link)) continue;
+        seen.add(title); seen.add(link);
+        const pubDate = it.querySelector('pubDate')?.textContent || '';
+        const source = sourceFromItem(it);
+        out.push({title, link, pubDate, source});
+        if(out.length >= LIMIT) break;
+      }
+      return out;
+    }
+
+    function renderArticles(list){
+      const grid = $('#grid');
+      grid.innerHTML = '';
+      for(const a of list){
+        const art = document.createElement('article');
+        art.className = 'card';
+        art.innerHTML = `
+          <div class="content">
+            <h2>${a.title}</h2>
+            <div class="meta">
+              ${a.source ? `<span>${a.source}</span>` : ''}
+              ${a.pubDate ? `<span title="${fmtTime(a.pubDate)}">преди ${timeAgo(a.pubDate)}</span>` : ''}
+            </div>
+          </div>
+          <div class="footer">
+            <a href="${a.link}" target="_blank" rel="noopener noreferrer">Прочети</a>
+          </div>`;
+        grid.appendChild(art);
+      }
+      $('#status').textContent = `Показани: ${list.length}/${LIMIT}`;
+    }
+
+    async function fetchRSS(url){
+      const res = await fetch(CORS_PROXY(url));
+      if(!res.ok) throw new Error('Грешка: '+res.status);
+      const txt = await res.text();
+      const doc = new DOMParser().parseFromString(txt, 'application/xml');
+      const items = $$('item', doc);
+      return normalizeArticles(items);
+    }
+
+    async function load(){
+      $('#status').textContent = 'Зареждане…';
+      try{
+        const list = await fetchRSS(BASE_BG_RSS);
+        renderArticles(list);
+      }catch(e){
+        console.error(e);
+        $('#status').textContent = 'Грешка при зареждането';
+      }
+    }
+
+    load();
+    setInterval(load, REFRESH_MS);
+  </script>
+</body>
+</html>
